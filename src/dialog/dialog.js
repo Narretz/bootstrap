@@ -207,7 +207,8 @@ dialogModule.provider("$dialog", function(){
     Dialog.prototype._addElementsToDom = function(){
       body.append(this.modalEl);
 
-      if(this.options.backdrop) { 
+      //Don't increase the backdrop count if a modal is opened while already open
+      if(this.options.backdrop && this._open === false) {
         if (activeBackdrops.value === 0) {
           body.append(this.backdropEl); 
         }

@@ -323,4 +323,21 @@ describe('Given ui.bootstrap.dialog', function(){
 
 		dialogShouldBeOpen();
 	});
+
+	describe('when closing a dialog that has been opened while already open', function(){
+
+		beforeEach(function(){
+			createDialog({template:template});
+			openDialog();
+			openDialog();
+			closeDialog();
+		});
+
+		dialogShouldBeClosed();
+
+		it('should not show the backdrop', function(){
+			expect($document.find('body > div.modal-backdrop').length).toBe(0);
+		});
+	});
+
 });
