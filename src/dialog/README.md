@@ -22,11 +22,13 @@ Sets the default global options for your application. Options can be overridden 
 *   `dialogFade`: a boolean value indicating whether the modal should fade in and out using a CSS transition, defaults to false
 *   `keyboard`: indicates whether the dialog should be closable by hitting the ESC key, defaults to true
 *   `backdropClick`: indicates whether the dialog should be closable by clicking the backdrop area, defaults to true
-
+*   `template`: the template for dialog
+*   `templateUrl`: path to the template for dialog
+  
 Example:
 
     var app = angular.module('App', ['ui.bootstrap.dialog'] , function($dialogProvider){
-        $dialogProvider.options({backdropClick: false, modalFade: true});
+        $dialogProvider.options({backdropClick: false, dialogFade: true});
     });
 
 # $dialog service
@@ -45,7 +47,7 @@ Example:
 
     app.controller('MainCtrl', function($dialog, $scope) {
         $scope.openItemEditor = function(item){
-            var d = $dialog.dialog({modalFade: false, resolve: {item: function(){ return angular.copy(item); } }});
+            var d = $dialog.dialog({dialogFade: false, resolve: {item: function(){ return angular.copy(item); } }});
             d.open('dialogs/item-editor.html', 'EditItemController');
         };
     });

@@ -45,91 +45,27 @@ describe('popover', function() {
     expect( elmScope.tt_isOpen ).toBe( false );
   }));
 
-  it('should have default placement of "top"', inject(function() {
-    elm.trigger( 'click' );
-    expect( elmScope.tt_placement ).toBe( "top" );
-  }));
+  it('should not unbind event handlers created by other directives - issue 456', inject( function( $compile ) {
 
-  it('should allow specification of placement', inject( function( $compile ) {
-    elm = $compile( angular.element(
-      '<span popover="popover text" popover-placement="bottom">Selector Text</span>'
-    ) )( scope );
-    elmScope = elm.scope();
+    scope.click = function() {
+      scope.clicked = !scope.clicked;
+    };
 
-    elm.trigger( 'click' );
-    expect( elmScope.tt_placement ).toBe( "bottom" );
-  }));
-
-  it('should work inside an ngRepeat', inject( function( $compile ) {
-
-    elm = $compile( angular.element(
-      '<ul>'+
-        '<li ng-repeat="item in items">'+
-          '<span popover="{{item.popover}}">{{item.name}}</span>'+
-        '</li>'+
-      '</ul>'
-    ) )( scope );
-
-    scope.items = [
-      { name: "One", popover: "First popover" }
-    ];
-
+    elmBody = angular.element(
+      '<div><input popover="Hello!" ng-click="click()" popover-trigger="mouseenter"/></div>'
+    );
+    $compile(elmBody)(scope);
     scope.$digest();
 
-    var tt = angular.element( elm.find("li > span")[0] );
+    elm = elmBody.find('input');
 
-    tt.trigger( 'click' );
+    elm.trigger( 'mouseenter' );
+    elm.trigger( 'mouseleave' );
+    expect(scope.clicked).toBeFalsy();
 
-    expect( tt.text() ).toBe( scope.items[0].name );
-    expect( tt.scope().tt_content ).toBe( scope.items[0].popover );
-
-    tt.trigger( 'click' );
+    elm.click();
+    expect(scope.clicked).toBeTruthy();
   }));
-
-  it('should only have an isolate scope on the popup', inject( function ( $compile ) {
-    var ttScope;
-
-    scope.popoverContent = "Popover Content";
-    scope.popoverTitle = "Popover Title";
-    scope.alt = "Alt Message";
-
-    elmBody = $compile( angular.element(
-      '<div><span alt={{alt}} popover="{{popoverContent}}" popover-title="{{popoverTitle}}">Selector Text</span></div>'
-    ) )( scope );
-
-    $compile( elmBody )( scope );
-    scope.$digest();
-    elm = elmBody.find( 'span' );
-    elmScope = elm.scope();
-
-    elm.trigger( 'click' );
-    expect( elm.attr( 'alt' ) ).toBe( scope.alt );
-
-    ttScope = angular.element( elmBody.children()[1] ).scope();
-    expect( ttScope.placement ).toBe( 'top' );
-    expect( ttScope.title ).toBe( scope.popoverTitle );
-    expect( ttScope.content ).toBe( scope.popoverContent );
-
-    elm.trigger( 'click' );
-  }));
-
-
-  it( 'should allow specification of delay', inject( function ($timeout, $compile) {
-
-    elm = $compile( angular.element(
-      '<span popover="popover text" popover-popup-delay="1000">Selector Text</span>'
-    ) )( scope );
-    elmScope = elm.scope();
-    scope.$digest();
-
-    elm.trigger( 'click' );
-    expect( elmScope.tt_isOpen ).toBe( false );
-
-    $timeout.flush();
-    expect( elmScope.tt_isOpen ).toBe( true );
-
-  } ) );
-
 });
 
     

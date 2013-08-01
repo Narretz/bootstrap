@@ -8,8 +8,13 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-contrib-jshint');
   grunt.loadNpmTasks('grunt-contrib-uglify');
   grunt.loadNpmTasks('grunt-html2js');
+  grunt.loadNpmTasks('grunt-karma');
+  grunt.loadNpmTasks('grunt-conventional-changelog');
+  grunt.loadNpmTasks('grunt-ngdocs');
 
   // Project configuration.
+  grunt.util.linefeed = '\n';
+
   grunt.initConfig({
     ngversion: '1.0.5',
     bsversion: '2.3.1',
@@ -23,17 +28,15 @@ module.exports = function(grunt) {
       tplmodules: 'angular.module("ui.bootstrap.tpls", [<%= tplModules %>]);',
       all: 'angular.module("ui.bootstrap", ["ui.bootstrap.tpls", <%= srcModules %>]);'
     },
-    watch: {
+    delta: {
       html: {
         files: ['template/**/*.html'],
-        tasks: ['html2js']
+        tasks: ['html2js', 'karma:watch:run']
       },
       js: {
-        //nospawn makes the tests start faster
-        nospawn: true,
         files: ['src/**/*.js'],
         //we don't need to jshint here, it slows down everything else
-        tasks: ['test-run']
+        tasks: ['karma:watch:run']
       }
     },
     concat: {
@@ -112,15 +115,92 @@ module.exports = function(grunt) {
           angular: true
         }
       }
+    },
+    karma: {
+      options: {
+        configFile: 'karma.conf.js'
+      },
+      watch: {
+        background: true
+      },
+      continuous: {
+        singleRun: true
+      },
+      jenkins: {
+        singleRun: true,
+        colors: false,
+        reporter: ['dots', 'junit'],
+        browsers: ['Chrome', 'ChromeCanary', 'Firefox', 'Opera', '/Users/jenkins/bin/safari.sh', '/Users/jenkins/bin/ie9.sh' ,'/Users/jenkins/bin/ie10.sh']
+      },
+      travis: {
+        singleRun: true,
+        browsers: ['Firefox']
+      }
+    },
+    changelog: {
+      options: {
+        dest: 'CHANGELOG.md',
+        templateFile: 'misc/changelog.tpl.md',
+        github: 'angular-ui/bootstrap'
+      }
+    },
+    shell: {
+      //We use %version% and evluate it at run-time, because <%= pkg.version %>
+      //is only evaluated once
+      'release-prepare': [
+        'grunt before-test after-test',
+        'grunt version', //remove "-SNAPSHOT"
+        'grunt changelog'
+      ],
+      'release-complete': [
+        'git commit CHANGELOG.md package.json -m "chore(release): v%version%"',
+        'git tag %version%'
+      ],
+      'release-start': [
+        'grunt version:minor:"SNAPSHOT"',
+        'git commit package.json -m "chore(release): Starting v%version%"'
+      ]
+    },
+    ngdocs: {
+      options: {
+        dest: 'dist/docs',
+        scripts: [
+          'angular.js', 
+          '<%= concat.dist_tpls.dest %>'
+        ],
+        styles: [
+          'docs/css/style.css'
+        ],
+        navTemplate: 'docs/nav.html',
+        title: 'ui-bootstrap',
+        html5Mode: false
+      },
+      api: {
+        src: ["src/**/*.js", "src/**/*.ngdoc"],
+        title: "API Documentation"
+      }
     }
   });
 
-  //register before and after test tasks so we've don't have to change cli options on the goole's CI server
-  grunt.registerTask('before-test', ['jshint', 'html2js']);
+  //register before and after test tasks so we've don't have to change cli 
+  //options on the goole's CI server
+  grunt.registerTask('before-test', ['enforce', 'jshint', 'html2js']);
   grunt.registerTask('after-test', ['build', 'copy']);
+
+  //Rename our watch task to 'delta', then make actual 'watch'
+  //task build things, then start test server
+  grunt.renameTask('watch', 'delta');
+  grunt.registerTask('watch', ['before-test', 'after-test', 'karma:watch', 'delta']);
 
   // Default task.
   grunt.registerTask('default', ['before-test', 'test', 'after-test']);
+
+  grunt.registerTask('enforce', 'Install commit message enforce script if it doesn\'t exist', function() {
+    if (!grunt.file.exists('.git/hooks/commit-msg')) {
+      grunt.file.copy('misc/validate-commit-msg.js', '.git/hooks/commit-msg');
+      require('fs').chmodSync('.git/hooks/commit-msg', '0755');
+    }
+  });
 
   //Common ui.bootstrap module containing all modules for src and templates
   //findModule: Adds a given module to config
@@ -196,6 +276,8 @@ module.exports = function(grunt) {
   });
 
   grunt.registerTask('build', 'Create bootstrap build files', function() {
+    var _ = grunt.util._;
+
     //If arguments define what modules to build, build those. Else, everything
     if (this.args.length) {
       this.args.forEach(findModule);
@@ -207,24 +289,23 @@ module.exports = function(grunt) {
         findModule(dir.split('/')[1]);
       });
     }
-    
-    //Pluck will take an array of objects, and map the given key to a new array
-    //@example: expect( pluck([{a:1},{a:2}], 'a') ).toBe([1,2])
-    function pluck(array, key) {
-      return array.map(function(obj) {
-        return obj[key];
-      });
-    }
 
     var modules = grunt.config('modules');
-    grunt.config('srcModules', pluck(modules, 'moduleName'));
-    grunt.config('tplModules', pluck(modules, 'tplModules'));
-    grunt.config('demoModules', modules.filter(function(module) {
-      return module.docs.md && module.docs.js && module.docs.html;
-    }));
+    grunt.config('srcModules', _.pluck(modules, 'moduleName'));
+    grunt.config('tplModules', _.pluck(modules, 'tplModules').filter(function(tpls) { return tpls.length > 0;} ));
+    grunt.config('demoModules', modules
+      .filter(function(module) {
+        return module.docs.md && module.docs.js && module.docs.html;
+      })
+      .sort(function(a, b) {
+        if (a.name < b.name) { return -1; }
+        if (a.name > b.name) { return 1; }
+        return 0;
+      })
+    );
 
-    var srcFiles = pluck(modules, 'srcFiles');
-    var tpljsFiles = pluck(modules, 'tpljsFiles');
+    var srcFiles = _.pluck(modules, 'srcFiles');
+    var tpljsFiles = _.pluck(modules, 'tpljsFiles');
     //Set the concat task to concatenate the given src modules
     grunt.config('concat.dist.src', grunt.config('concat.dist.src')
                  .concat(srcFiles));
@@ -235,111 +316,53 @@ module.exports = function(grunt) {
     grunt.task.run(['concat', 'uglify']);
   });
 
-  grunt.registerTask('test', 'run tests on single-run server', function() {
-    var options = ['--single-run', '--no-auto-watch', '--log-level=warn']
-      .concat(this.args) //Let user augment test args with command line args
-      .concat(process.env.TRAVIS ? '--browsers=Firefox' : '');
-    runKarma('start', options);
+  grunt.registerTask('test', 'Run tests on singleRun karma server', function() {
+    //this task can be executed in 3 different environments: local, Travis-CI and Jenkins-CI
+    //we need to take settings for each one into account
+    if (process.env.TRAVIS) {
+      grunt.task.run('karma:travis');
+    } else {
+      grunt.task.run(this.args.length ? 'karma:jenkins' : 'karma:continuous');
+    }
   });
 
-  grunt.registerTask('server', 'start karma server', function() {
-    var options = ['--no-single-run', '--no-auto-watch'].concat(this.args);
-    runKarma('start', options);
-  });
-
-  grunt.registerTask('test-run', 'run tests against continuous karma server', function() {
-    var options = ['--single-run', '--no-auto-watch'].concat(this.args);
-    runKarma('run', options);
-  });
-
-  grunt.registerTask('test-watch', 'start karma server, watch & execute tests', function() {
-    var options = ['--no-single-run', '--auto-watch'].concat(this.args);
-    runKarma('start', options);
-  });
-
-  //changelog generation
-  grunt.registerTask('changelog', 'generates changelog markdown from git commits', function () {
-
-    var changeFrom = this.args[0], changeTo = this.args[1] || 'HEAD';
-
-    var done = grunt.task.current.async();
-    var child = grunt.util.spawn({
-      cmd:process.platform === 'win32' ? 'git.cmd' : 'git',
-      args: [
-        'log',
-        changeFrom + '..' + changeTo,
-        '--format=%H%n%s%n%b%n==END=='
-      ]
-    }, function (err, result, code) {
-
-      var changelog = {};
-      function addChange(changeType, component, change) {
-        if (!changelog[changeType]) {
-          changelog[changeType] = {};
-        }
-        if (!changelog[changeType][component]) {
-          changelog[changeType][component] = [];
-        }
-        changelog[changeType][component].push(change);
+  function setVersion(type, suffix) {
+    var file = 'package.json';
+    var VERSION_REGEX = /([\'|\"]version[\'|\"][ ]*:[ ]*[\'|\"])([\d|.]*)(-\w+)*([\'|\"])/;
+    var contents = grunt.file.read(file);
+    var version;
+    contents = contents.replace(VERSION_REGEX, function(match, left, center) {
+      version = center;
+      if (type) {
+        version = require('semver').inc(version, type);
       }
-
-      var COMMIT_MSG_REGEXP = /^(chore|demo|docs|feat|fix|refactor|style|test)\((.+)\):? (.+)$/;
-      var gitlog = result.toString().split('\n==END==\n').reverse();
-
-      if (code) {
-        grunt.log.error(err);
-        done(false);
-      } else {
-
-        gitlog.forEach(function (logItem) {
-          var lines = logItem.split('\n');
-          var sha1 = lines.shift().substr(0,8); //Only first 7 of sha1
-          var subject = lines.shift();
-
-          var msgMatches = subject.match(COMMIT_MSG_REGEXP);
-          var changeType = msgMatches[1];
-          var component = msgMatches[2];
-          var componentMsg = msgMatches[3];
-
-          var breaking = logItem.match(/BREAKING CHANGE:([\s\S]*)/);
-          if (breaking) {
-            addChange('breaking', component, {
-              sha1: sha1,
-              msg: breaking[1]
-            });
-          }
-          addChange(changeType, component, {sha1:sha1, msg:componentMsg});
-        });
-
-        console.log(grunt.template.process(grunt.file.read('misc/changelog.tpl.md'), {data: {
-          changelog: changelog,
-          today: grunt.template.today('yyyy-mm-dd'),
-          version : grunt.config('pkg.version')
-        }}));
-
-        done();
+      //semver.inc strips our suffix if it existed
+      if (suffix) {
+        version += '-' + suffix;
       }
+      return left + version + '"';
     });
-  });
-
-  // Karma configuration
-  function runKarma(command, options) {
-    var karmaCmd = process.platform === 'win32' ? 'karma.cmd' : 'karma';
-    var args = [command].concat(options);
-    var done = grunt.task.current.async();
-    var child = grunt.util.spawn({
-        cmd: karmaCmd,
-        args: args
-    }, function(err, result, code) {
-      if (code) {
-        done(false);
-      } else {
-        done();
-      }
-    });
-    child.stdout.pipe(process.stdout);
-    child.stderr.pipe(process.stderr);
+    grunt.log.ok('Version set to ' + version.cyan);
+    grunt.file.write(file, contents);
+    return version;
   }
-  
+
+  grunt.registerTask('version', 'Set version. If no arguments, it just takes off suffix', function() {
+    setVersion(this.args[0], this.args[1]);
+  });
+
+  grunt.registerMultiTask('shell', 'run shell commands', function() {
+    var self = this;
+    var sh = require('shelljs');
+    self.data.forEach(function(cmd) {
+      cmd = cmd.replace('%version%', grunt.file.readJSON('package.json').version);
+      grunt.log.ok(cmd);
+      var result = sh.exec(cmd,{silent:true});
+      if (result.code !== 0) {
+        grunt.fatal(result.output);
+      }
+    });
+  });
+
   return grunt;
 };
