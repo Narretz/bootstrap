@@ -133,6 +133,12 @@ angular.module('ui.bootstrap.modal', [])
       $modalStack.open = function (modalInstance, modal) {
 
         var backdropDomEl;
+
+        // only add the class if this is the first opened modal on the stack
+        if (openedWindows.length() === 0) {
+          body.addClass('modal-open');
+        }
+
         if (modal.backdrop) {
           backdropDomEl = $compile(angular.element('<div modal-backdrop></div>'))($rootScope);
           body.append(backdropDomEl);
@@ -153,6 +159,11 @@ angular.module('ui.bootstrap.modal', [])
       $modalStack.close = function (modalInstance, result) {
         var modal = openedWindows.get(modalInstance);
         if (modal) {
+          // only remove modal-open if it's the last modal on teh stack
+          if (openedWindows.length() === 1) {
+            body.removeClass('modal-open');
+          }
+
           modal.value.deferred.resolve(result);
           removeModalWindow(modalInstance);
         }
@@ -161,6 +172,10 @@ angular.module('ui.bootstrap.modal', [])
       $modalStack.dismiss = function (modalInstance, reason) {
         var modalWindow = openedWindows.get(modalInstance).value;
         if (modalWindow) {
+          if (openedWindows.length() === 1) {
+            body.removeClass('modal-open');
+          }
+
           modalWindow.deferred.reject(reason);
           removeModalWindow(modalInstance);
         }
