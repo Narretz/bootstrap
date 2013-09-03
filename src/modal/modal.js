@@ -141,8 +141,6 @@ angular.module('ui.bootstrap.modal', [])
         var modalDomEl = $compile(angular.element('<div modal-window></div>').html(modal.content))(modal.scope);
         body.append(modalDomEl);
 
-        
-
         openedWindows.add(modalInstance, {
           deferred: modal.deferred,
           modalScope: modal.scope,
@@ -231,7 +229,7 @@ angular.module('ui.bootstrap.modal', [])
             };
 
             //merge and clean up options
-            modalOptions = angular.extend(defaultOptions, modalOptions);
+            modalOptions = angular.extend(angular.copy(defaultOptions), modalOptions);
             modalOptions.resolve = modalOptions.resolve || {};
 
             //verify options
