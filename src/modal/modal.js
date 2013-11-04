@@ -23,6 +23,13 @@ angular.module('ui.bootstrap.modal', [])
               }
             }
           },
+          keys: function() {
+            var keys = [];
+            for (var i = 0; i < stack.length; i++) {
+              keys.push(stack[i].key);
+            }
+            return keys;
+          },
           top: function () {
             return stack[stack.length - 1];
           },
@@ -53,7 +60,6 @@ angular.module('ui.bootstrap.modal', [])
   .directive('modalBackdrop', ['$modalStack', '$timeout', function ($modalStack, $timeout) {
     return {
       restrict: 'EA',
-      scope: {},
       replace: true,
       templateUrl: 'template/modal/backdrop.html',
       link: function (scope, element, attrs) {
@@ -61,6 +67,15 @@ angular.module('ui.bootstrap.modal', [])
         $timeout(function () {
           scope.animate = true;
         });
+
+        scope.close = function (evt) {
+          var modal = $modalStack.getTop();
+          if (modal && modal.value.backdrop && modal.value.backdrop != 'static') {
+            evt.preventDefault();
+            evt.stopPropagation();
+            $modalStack.dismiss(modal.key, 'backdrop click');
+          }
+        };
       }
     };
   }])
@@ -68,11 +83,15 @@ angular.module('ui.bootstrap.modal', [])
   .directive('modalWindow', ['$modalStack', '$timeout', function ($modalStack, $timeout) {
     return {
       restrict: 'EA',
-      scope: {},
+      scope: {
+        index: '@'
+      },
       replace: true,
       transclude: true,
       templateUrl: 'template/modal/window.html',
       link: function (scope, element, attrs) {
+        scope.windowClass = attrs.windowClass || '';
+
         //trigger CSS transitions
         $timeout(function () {
           scope.animate = true;
@@ -94,9 +113,26 @@ angular.module('ui.bootstrap.modal', [])
   .factory('$modalStack', ['$document', '$compile', '$rootScope', '$$stackedMap',
     function ($document, $compile, $rootScope, $$stackedMap) {
 
+      var backdropjqLiteEl, backdropDomEl;
+      var backdropScope = $rootScope.$new(true);
       var body = $document.find('body').eq(0);
       var openedWindows = $$stackedMap.createNew();
       var $modalStack = {};
+
+      function backdropIndex() {
+        var topBackdropIndex = -1;
+        var opened = openedWindows.keys();
+        for (var i = 0; i < opened.length; i++) {
+          if (openedWindows.get(opened[i]).value.backdrop) {
+            topBackdropIndex = i;
+          }
+        }
+        return topBackdropIndex;
+      }
+
+      $rootScope.$watch(backdropIndex, function(newBackdropIndex){
+        backdropScope.index = newBackdropIndex;
+      });
 
       function removeModalWindow(modalInstance) {
 
@@ -105,12 +141,13 @@ angular.module('ui.bootstrap.modal', [])
         //clean up the stack
         openedWindows.remove(modalInstance);
 
-        //remove DOM element
+        //remove window DOM element
         modalWindow.modalDomEl.remove();
 
-        //remove backdrop
-        if (modalWindow.backdropDomEl) {
-          modalWindow.backdropDomEl.remove();
+        //remove backdrop if no longer needed
+        if (backdropDomEl && backdropIndex() == -1) {
+          backdropDomEl.remove();
+          backdropDomEl = undefined;
         }
 
         //destroy scope
@@ -133,11 +170,16 @@ angular.module('ui.bootstrap.modal', [])
       $modalStack.open = function (modalInstance, modal) {
 
         var backdropDomEl;
-
-        // only add the class if this is the first opened modal on the stack
-        if (openedWindows.length() === 0) {
-          body.addClass('modal-open');
+        if (modal.backdrop) {
+          backdropDomEl = $compile(angular.element('<div modal-backdrop></div>'))($rootScope);
+          body.append(backdropDomEl);
         }
+        var modalDomEl = $compile(angular.element('<div modal-window></div>').html(modal.content))(modal.scope);
+        body.append(modalDomEl);
+
+        
+
+        var backdropDomEl;
 
         if (modal.backdrop) {
           backdropDomEl = $compile(angular.element('<div modal-backdrop></div>'))($rootScope);
@@ -149,20 +191,29 @@ angular.module('ui.bootstrap.modal', [])
         openedWindows.add(modalInstance, {
           deferred: modal.deferred,
           modalScope: modal.scope,
-          modalDomEl: modalDomEl,
           backdrop: modal.backdrop,
-          backdropDomEl: backdropDomEl,
           keyboard: modal.keyboard
         });
+
+        var angularDomEl = angular.element('<div modal-window></div>');
+        angularDomEl.attr('window-class', modal.windowClass);
+        angularDomEl.attr('index', openedWindows.length() - 1);
+        angularDomEl.html(modal.content);
+
+        var modalDomEl = $compile(angularDomEl)(modal.scope);
+        openedWindows.top().value.modalDomEl = modalDomEl;
+        body.append(modalDomEl);
+
+        if (backdropIndex() >= 0 && !backdropDomEl) {
+            backdropjqLiteEl = angular.element('<div modal-backdrop></div>');
+            backdropDomEl = $compile(backdropjqLiteEl)(backdropScope);
+            body.append(backdropDomEl);
+        }
       };
 
       $modalStack.close = function (modalInstance, result) {
         var modal = openedWindows.get(modalInstance);
         if (modal) {
-          // only remove modal-open if it's the last modal on teh stack
-          if (openedWindows.length() === 1) {
-            body.removeClass('modal-open');
-          }
 
           modal.value.deferred.resolve(result);
           removeModalWindow(modalInstance);
@@ -172,9 +223,6 @@ angular.module('ui.bootstrap.modal', [])
       $modalStack.dismiss = function (modalInstance, reason) {
         var modalWindow = openedWindows.get(modalInstance).value;
         if (modalWindow) {
-          if (openedWindows.length() === 1) {
-            body.removeClass('modal-open');
-          }
 
           modalWindow.deferred.reject(reason);
           removeModalWindow(modalInstance);
@@ -182,13 +230,7 @@ angular.module('ui.bootstrap.modal', [])
       };
 
       $modalStack.getTop = function () {
-        var top = openedWindows.top();
-        if (top) {
-          return {
-            instance: top.key,
-            window: top.value
-          };
-        }
+        return openedWindows.top();
       };
 
       return $modalStack;
@@ -196,13 +238,11 @@ angular.module('ui.bootstrap.modal', [])
 
   .provider('$modal', function () {
 
-    var defaultOptions = {
-      backdrop: true, //can be also false or 'static'
-      keyboard: true
-    };
-
-    return {
-      options: defaultOptions,
+    var $modalProvider = {
+      options: {
+        backdrop: true, //can be also false or 'static'
+        keyboard: true
+      },
       $get: ['$injector', '$rootScope', '$q', '$http', '$templateCache', '$controller', '$modalStack',
         function ($injector, $rootScope, $q, $http, $templateCache, $controller, $modalStack) {
 
@@ -235,15 +275,15 @@ angular.module('ui.bootstrap.modal', [])
               result: modalResultDeferred.promise,
               opened: modalOpenedDeferred.promise,
               close: function (result) {
-                $modalStack.close(this, result);
+                $modalStack.close(modalInstance, result);
               },
               dismiss: function (reason) {
-                $modalStack.dismiss(this, reason);
+                $modalStack.dismiss(modalInstance, reason);
               }
             };
 
             //merge and clean up options
-            modalOptions = angular.extend({}, defaultOptions, modalOptions);
+            modalOptions = angular.extend({}, $modalProvider.options, modalOptions);
             modalOptions.resolve = modalOptions.resolve || {};
 
             //verify options
@@ -258,6 +298,8 @@ angular.module('ui.bootstrap.modal', [])
             templateAndResolvePromise.then(function resolveSuccess(tplAndVars) {
 
               var modalScope = (modalOptions.scope || $rootScope).$new();
+              modalScope.$close = modalInstance.close;
+              modalScope.$dismiss = modalInstance.dismiss;
 
               var ctrlInstance, ctrlLocals = {};
               var resolveIter = 1;
@@ -278,7 +320,8 @@ angular.module('ui.bootstrap.modal', [])
                 deferred: modalResultDeferred,
                 content: tplAndVars[0],
                 backdrop: modalOptions.backdrop,
-                keyboard: modalOptions.keyboard
+                keyboard: modalOptions.keyboard,
+                windowClass: modalOptions.windowClass
               });
 
             }, function resolveError(reason) {
@@ -297,4 +340,6 @@ angular.module('ui.bootstrap.modal', [])
           return $modal;
         }]
     };
+
+    return $modalProvider;
   });
