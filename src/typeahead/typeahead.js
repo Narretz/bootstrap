@@ -68,7 +68,7 @@ angular.module('ui.bootstrap.typeahead', ['ui.bootstrap.position', 'ui.bootstrap
       var hasFocus;
 
       //pop-up element used to display matches
-      var popUpEl = angular.element('<typeahead-popup></typeahead-popup>');
+      var popUpEl = angular.element('<div typeahead-popup></div>');
       popUpEl.attr({
         matches: 'matches',
         active: 'activeIdx',
@@ -97,7 +97,7 @@ angular.module('ui.bootstrap.typeahead', ['ui.bootstrap.position', 'ui.bootstrap
 
         var locals = {$viewValue: inputValue};
         isLoadingSetter(originalScope, true);
-        $q.when(parserResult.source(scope, locals)).then(function(matches) {
+        $q.when(parserResult.source(originalScope, locals)).then(function(matches) {
 
           //it might happen that several async queries were in progress if a user were typing fast
           //but we are interested only in responses that correspond to the current view value
@@ -283,7 +283,7 @@ angular.module('ui.bootstrap.typeahead', ['ui.bootstrap.position', 'ui.bootstrap
 
   .directive('typeaheadPopup', function () {
     return {
-      restrict:'E',
+      restrict:'EA',
       scope:{
         matches:'=',
         query:'=',
@@ -318,7 +318,7 @@ angular.module('ui.bootstrap.typeahead', ['ui.bootstrap.position', 'ui.bootstrap
 
   .directive('typeaheadMatch', ['$http', '$templateCache', '$compile', '$parse', function ($http, $templateCache, $compile, $parse) {
     return {
-      restrict:'E',
+      restrict:'EA',
       scope:{
         index:'=',
         match:'=',
