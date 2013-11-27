@@ -57,7 +57,7 @@ angular.module('ui.bootstrap.modal', [])
 /**
  * A helper directive for the $modal service. It creates a backdrop element.
  */
-  .directive('modalBackdrop', ['$modalStack', '$timeout', function ($modalStack, $timeout) {
+  .directive('modalBackdrop', ['$timeout', function ($timeout) {
     return {
       restrict: 'EA',
       replace: true,
@@ -67,15 +67,6 @@ angular.module('ui.bootstrap.modal', [])
         $timeout(function () {
           scope.animate = true;
         });
-
-        scope.close = function (evt) {
-          var modal = $modalStack.getTop();
-          if (modal && modal.value.backdrop && modal.value.backdrop != 'static') {
-            evt.preventDefault();
-            evt.stopPropagation();
-            $modalStack.dismiss(modal.key, 'backdrop click');
-          }
-        };
       }
     };
   }])
@@ -99,11 +90,10 @@ angular.module('ui.bootstrap.modal', [])
 
         scope.close = function (evt) {
           var modal = $modalStack.getTop();
-          //TODO: this logic is duplicated with the place where modal gets opened
-          if (modal && modal.window.backdrop && modal.window.backdrop != 'static' && (evt.target === evt.currentTarget)) {
+          if (modal && modal.value.backdrop && modal.value.backdrop != 'static' && (evt.target === evt.currentTarget)) {
             evt.preventDefault();
             evt.stopPropagation();
-            $modalStack.dismiss(modal.instance, 'backdrop click');
+            $modalStack.dismiss(modal.key, 'backdrop click');
           }
         };
       }
@@ -129,6 +119,10 @@ angular.module('ui.bootstrap.modal', [])
         }
         return topBackdropIndex;
       }
+
+      $rootScope.$watch(openedWindows.length, function(noOfModals){
+        body.toggleClass('modal-open', openedWindows.length() > 0);
+      });
 
       $rootScope.$watch(backdropIndex, function(newBackdropIndex){
         backdropScope.index = newBackdropIndex;
@@ -169,25 +163,6 @@ angular.module('ui.bootstrap.modal', [])
 
       $modalStack.open = function (modalInstance, modal) {
 
-        var backdropDomEl;
-        if (modal.backdrop) {
-          backdropDomEl = $compile(angular.element('<div modal-backdrop></div>'))($rootScope);
-          body.append(backdropDomEl);
-        }
-        var modalDomEl = $compile(angular.element('<div modal-window></div>').html(modal.content))(modal.scope);
-        body.append(modalDomEl);
-
-        
-
-        var backdropDomEl;
-
-        if (modal.backdrop) {
-          backdropDomEl = $compile(angular.element('<div modal-backdrop></div>'))($rootScope);
-          body.append(backdropDomEl);
-        }
-        var modalDomEl = $compile(angular.element('<div modal-window></div>').html(modal.content))(modal.scope);
-        body.append(modalDomEl);
-
         openedWindows.add(modalInstance, {
           deferred: modal.deferred,
           modalScope: modal.scope,
@@ -212,10 +187,9 @@ angular.module('ui.bootstrap.modal', [])
       };
 
       $modalStack.close = function (modalInstance, result) {
-        var modal = openedWindows.get(modalInstance);
-        if (modal) {
-
-          modal.value.deferred.resolve(result);
+        var modalWindow = openedWindows.get(modalInstance).value;
+        if (modalWindow) {
+          modalWindow.deferred.resolve(result);
           removeModalWindow(modalInstance);
         }
       };
@@ -223,7 +197,6 @@ angular.module('ui.bootstrap.modal', [])
       $modalStack.dismiss = function (modalInstance, reason) {
         var modalWindow = openedWindows.get(modalInstance).value;
         if (modalWindow) {
-
           modalWindow.deferred.reject(reason);
           removeModalWindow(modalInstance);
         }
