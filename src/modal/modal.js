@@ -80,22 +80,29 @@ angular.module('ui.bootstrap.modal', [])
       replace: true,
       transclude: true,
       templateUrl: 'template/modal/window.html',
-      link: function (scope, element, attrs) {
-        scope.windowClass = attrs.windowClass || '';
+      compile: function(tElement, tAttry, transclude) {
+        return function (scope, element, attrs) {
 
-        //trigger CSS transitions
-        $timeout(function () {
-          scope.animate = true;
-        });
+          transclude(scope.$parent, function(clone) {
+            element.append(clone);
+          });
 
-        scope.close = function (evt) {
-          var modal = $modalStack.getTop();
-          if (modal && modal.value.backdrop && modal.value.backdrop != 'static' && (evt.target === evt.currentTarget)) {
-            evt.preventDefault();
-            evt.stopPropagation();
-            $modalStack.dismiss(modal.key, 'backdrop click');
-          }
-        };
+          scope.windowClass = attrs.windowClass || '';
+
+          //trigger CSS transitions
+          $timeout(function () {
+            scope.animate = true;
+          });
+
+          scope.close = function (evt) {
+            var modal = $modalStack.getTop();
+            if (modal && modal.value.backdrop && modal.value.backdrop != 'static' && (evt.target === evt.currentTarget)) {
+              evt.preventDefault();
+              evt.stopPropagation();
+              $modalStack.dismiss(modal.key, 'backdrop click');
+            }
+          };
+        }
       }
     };
   }])
