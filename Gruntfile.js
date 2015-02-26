@@ -130,7 +130,8 @@ module.exports = function(grunt) {
         background: true
       },
       continuous: {
-        singleRun: true
+        singleRun: false,
+        autoWatch: true
       },
       jenkins: {
         singleRun: true,

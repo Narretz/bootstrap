@@ -136,8 +136,9 @@ angular.module('ui.bootstrap.modal', ['ui.bootstrap.transition'])
 
       var OPENED_MODAL_CLASS = 'modal-open';
 
-      var backdropDomEl, backdropScope;
+      var DEFAULT_BACKDROP = 'DEFAULT_BACKDROP';
       var openedWindows = $$stackedMap.createNew();
+      var openedBackdrops = $$stackedMap.createNew();
       var $modalStack = {};
 
       function backdropIndex() {
@@ -151,38 +152,55 @@ angular.module('ui.bootstrap.modal', ['ui.bootstrap.transition'])
         return topBackdropIndex;
       }
 
-      $rootScope.$watch(backdropIndex, function(newBackdropIndex){
-        if (backdropScope) {
-          backdropScope.index = newBackdropIndex;
-        }
-      });
+      // $rootScope.$watch(backdropIndex, function(newBackdropIndex){
+      //   if (backdropScope) {
+      //     backdropScope.index = newBackdropIndex;
+      //   }
+      // });
 
       function removeModalWindow(modalInstance) {
 
         var body = $document.find('body').eq(0);
-        var modalWindow = openedWindows.get(modalInstance).value;
+        var modal = openedWindows.get(modalInstance);
+        var modalWindow = modal.value;
 
-        //clean up the stack
-        openedWindows.remove(modalInstance);
 
         //remove window DOM element
         removeAfterAnimate(modalWindow.modalDomEl, modalWindow.modalScope, 300, function() {
           modalWindow.modalScope.$destroy();
+          checkRemoveBackdrop(modalInstance, modal);
+          //clean up the stack
+          openedWindows.remove(modalInstance);
+
+          if (modal.value.backdrop && !modal.value.isolateBackdrop) {
+            var defaultBackdrop = openedBackdrops.get(DEFAULT_BACKDROP);
+            // When the default  backdrop index moves because an intermittent
+            // isolate backdrop is closed, make sure the index is updated correctly
+            // defaultBackdrop.value.backdropScope.index = backdropIndex();
+          }
+
           body.toggleClass(OPENED_MODAL_CLASS, openedWindows.length() > 0);
-          checkRemoveBackdrop();
         });
       }
 
-      function checkRemoveBackdrop() {
+      function checkRemoveBackdrop(modalInstance, modal) {
           //remove backdrop if no longer needed
-          if (backdropDomEl && backdropIndex() == -1) {
-            var backdropScopeRef = backdropScope;
-            removeAfterAnimate(backdropDomEl, backdropScope, 150, function () {
+
+          var openBackdropsLength = openedBackdrops.length();
+          var cleanedUpIndex = backdropIndex() - openBackdropsLength;
+
+          if (openBackdropsLength > 0 && (modal.value.isolateBackdrop || cleanedUpIndex == -1)) {
+
+            var backdropKey = modal.value.isolateBackdrop ? modalInstance : DEFAULT_BACKDROP;
+
+            var backdrop = openedBackdrops.get(backdropKey);
+
+            var backdropScopeRef = backdrop.value.backdropScope;
+            removeAfterAnimate(backdrop.value.backdropDomEl, backdrop.value.backdropScope, 150, function () {
               backdropScopeRef.$destroy();
               backdropScopeRef = null;
+              openedBackdrops.remove(backdropKey);
             });
-            backdropDomEl = undefined;
-            backdropScope = undefined;
           }
       }
 
@@ -238,19 +256,34 @@ angular.module('ui.bootstrap.modal', ['ui.bootstrap.transition'])
           deferred: modal.deferred,
           modalScope: modal.scope,
           backdrop: modal.backdrop,
-          keyboard: modal.keyboard
+          keyboard: modal.keyboard,
+          isolateBackdrop: modal.isolateBackdrop
         });
 
         var body = $document.find('body').eq(0),
             currBackdropIndex = backdropIndex();
 
-        if (currBackdropIndex >= 0 && !backdropDomEl) {
-          backdropScope = $rootScope.$new(true);
+        if (currBackdropIndex >= 0 && (openedBackdrops.length() === 0 || modal.isolateBackdrop)) {
+          var backdropScope = $rootScope.$new(true);
           backdropScope.index = currBackdropIndex;
+
           var angularBackgroundDomEl = angular.element('<div modal-backdrop></div>');
           angularBackgroundDomEl.attr('backdrop-class', modal.backdropClass);
-          backdropDomEl = $compile(angularBackgroundDomEl)(backdropScope);
+
+          var backdropDomEl = $compile(angularBackgroundDomEl)(backdropScope);
           body.append(backdropDomEl);
+
+          var backdropKey = modal.isolateBackdrop ? modalInstance : DEFAULT_BACKDROP;
+
+          openedBackdrops.add(backdropKey, {
+            backdropScope: backdropScope,
+            backdropDomEl:  backdropDomEl
+          });
+        }
+
+        if (modal.backdrop && !modal.isolateBackdrop) {
+          var defaultBackdrop = openedBackdrops.get(DEFAULT_BACKDROP);
+          defaultBackdrop.value.backdropScope.index = currBackdropIndex;
         }
 
         var angularDomEl = angular.element('<div modal-window></div>');
@@ -391,7 +424,8 @@ angular.module('ui.bootstrap.modal', ['ui.bootstrap.transition'])
                 backdropClass: modalOptions.backdropClass,
                 windowClass: modalOptions.windowClass,
                 windowTemplateUrl: modalOptions.windowTemplateUrl,
-                size: modalOptions.size
+                size: modalOptions.size,
+                isolateBackdrop: modalOptions.isolateBackdrop
               });
 
             }, function resolveError(reason) {

@@ -1,4 +1,4 @@
-describe('$modal', function () {
+ddescribe('$modal', function () {
   var $controllerProvider, $rootScope, $document, $compile, $templateCache, $timeout, $q;
   var $modal, $modalProvider;
 
@@ -606,5 +606,87 @@ describe('$modal', function () {
       dismiss(modal2);
       expect(body).not.toHaveClass('modal-open');
     });
+
+    iit('should create a new backdrop if isolateBackdrop is true', function () {
+
+      var modals, modal1Scope, backdrops, backdrop1Scope, backdrop2Scope;
+      var body = $document.find('body');
+      expect(body).not.toHaveClass('modal-open');
+
+      var modal1 = open({template: '<div>Content1</div>'});
+      expect(body).toHaveClass('modal-open');
+
+      backdrops = $document.find('.modal-backdrop');
+      backdrop1Scope = backdrops.scope();
+
+      expect(backdrops.length).toBe(1);
+      expect(backdrop1Scope.index).toBe(0);
+
+      var modal2 = open({template: '<div>Content1</div>', isolateBackdrop: true});
+      expect(body).toHaveClass('modal-open');
+
+      backdrops = $document.find('.modal-backdrop');
+      backdrop1Scope = angular.element(backdrops[0]).scope();
+      backdrop2Scope = angular.element(backdrops[1]).scope();
+
+      expect(backdrops.length).toBe(2);
+      expect(backdrop1Scope.index).toBe(0);
+      expect(backdrop2Scope.index).toBe(1);
+
+      dismiss(modal1);
+      expect(body).toHaveClass('modal-open');
+      waitForBackdropAnimation();
+
+      backdrops = $document.find('.modal-backdrop');
+      expect(backdrops.length).toBe(1);
+
+      dismiss(modal2);
+      expect(body).not.toHaveClass('modal-open');
+      waitForBackdropAnimation();
+
+      backdrops = $document.find('.modal-backdrop');
+      expect($document).not.toHaveBackdrop();
+      expect(backdrops.length).toBe(0);
+    });
+
+    iit('should put the default backdrop on top if a isolateBackdrop is in between', function () {
+
+      var modals, modal1Scope, backdrops, backdrop1Scope, backdrop2Scope;
+      var body = $document.find('body');
+
+      var modal1 = open({template: '<div>Content1</div>'});
+      var modal2 = open({template: '<div>Content1</div>', isolateBackdrop: true});
+      var modal3 = open({template: '<div>Content1</div>'});
+
+      expect(body).toHaveClass('modal-open');
+
+      backdrops = $document.find('.modal-backdrop');
+      backdrop1Scope = angular.element(backdrops[0]).scope();
+      backdrop2Scope = angular.element(backdrops[1]).scope();
+
+      expect(backdrops.length).toBe(2);
+      expect(backdrop1Scope.index).toBe(2);
+      expect(backdrop2Scope.index).toBe(1);
+
+      dismiss(modal3);
+
+      backdrops = $document.find('.modal-backdrop');
+      backdrop1Scope = angular.element(backdrops[0]).scope();
+      backdrop2Scope = angular.element(backdrops[1]).scope();
+
+      expect(backdrops.length).toBe(2);
+      expect(backdrop1Scope.index).toBe(0);
+      expect(backdrop2Scope.index).toBe(1);
+
+      dismiss(modal2);
+      waitForBackdropAnimation();
+
+      backdrops = $document.find('.modal-backdrop');
+      expect(backdrops.length).toBe(1);
+
+      backdrop1Scope = backdrops.scope();
+      expect(backdrop1Scope.index).toBe(0);
+    });
+
   });
 });
